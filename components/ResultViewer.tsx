@@ -3,7 +3,6 @@
 import { Download, Clock } from 'lucide-react';
 import { Card } from './Card';
 import { PrimaryButton } from './PrimaryButton';
-import { downloadFile } from '@/lib/api';
 
 interface ResultViewerProps {
   imageUrl: string;
@@ -11,14 +10,34 @@ interface ResultViewerProps {
   generationTimeMs?: number;
 }
 
+// 🔥 Gerçek indirme yapan fonksiyon:
+async function downloadBlob(url: string, filename: string) {
+  try {
+    const response = await fetch(url, { mode: "cors" });
+    const blob = await response.blob();
+
+    const downloadUrl = window.URL.createObjectURL(blob);
+    const link = document.createElement("a");
+
+    link.href = downloadUrl;
+    link.download = filename;
+    link.click();
+
+    window.URL.revokeObjectURL(downloadUrl);
+  } catch (error) {
+    console.error("Download failed:", error);
+  }
+}
+
 export function ResultViewer({ imageUrl, videoUrl, generationTimeMs }: ResultViewerProps) {
+  
   const handleDownloadImage = () => {
-    downloadFile(imageUrl, 'virtual-tryon-result.jpg');
+    downloadBlob(imageUrl, "virtual-tryon-result.jpg");
   };
 
   const handleDownloadVideo = () => {
     if (videoUrl) {
-      downloadFile(videoUrl, 'virtual-tryon-video.mp4');
+      downloadBlob(videoUrl, "virtual-tryon-video.mp4");
     }
   };
 
