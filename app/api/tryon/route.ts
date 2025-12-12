@@ -1,7 +1,7 @@
 export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
-import { createFalClient } from "@fal-ai/serverless-client";
+import { createFalClient } from "@fal-ai/client";
 
 function mustEnv(name: string) {
   const v = process.env[name];
@@ -13,7 +13,7 @@ export async function POST(req: Request) {
   try {
     const FAL_KEY = mustEnv("FAL_KEY");
 
-    // ✅ Doğru kullanım: client oluştur
+    // ✅ Resmi client
     const fal = createFalClient({ credentials: FAL_KEY });
 
     const body = await req.json();
@@ -26,7 +26,6 @@ export async function POST(req: Request) {
       );
     }
 
-    // ✅ Gerçek fal try-on çağrısı
     const result: any = await fal.run("fal-ai/kling/v1-5/kolors-virtual-try-on", {
       input: {
         model_image: modelImage,
@@ -56,10 +55,7 @@ export async function POST(req: Request) {
       );
     }
 
-    return NextResponse.json(
-      { imageUrl, videoUrl: videoUrl ?? null },
-      { status: 200 }
-    );
+    return NextResponse.json({ imageUrl, videoUrl: videoUrl ?? null }, { status: 200 });
   } catch (err: any) {
     return NextResponse.json(
       { error: "Server error", message: String(err?.message ?? err) },
