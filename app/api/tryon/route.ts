@@ -1,71 +1,85 @@
-export const dynamic = "force-dynamic";
-
 import { NextResponse } from "next/server";
-import { createFalClient } from "@fal-ai/client";
+import { createClient } from "@supabase/supabase-js";
 
-function mustEnv(name: string) {
-  const v = process.env[name];
-  if (!v) throw new Error(`Missing env var: ${name}`);
-  return v;
-}
+export const dynamic = "force-dynamic";
 
 export async function POST(req: Request) {
   try {
-    const FAL_KEY = mustEnv("FAL_KEY");
+    // ======================
+    // AUTH HEADER
+    // ======================
+    const authHeader = req.headers.get("authorization");
 
-    // ✅ Resmi client
-    const fal = createFalClient({ credentials: FAL_KEY });
-
-    const body = await req.json();
-    const { modelImage, tshirtImage, generateVideo } = body ?? {};
-
-    if (!modelImage || !tshirtImage) {
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
       return NextResponse.json(
-        { error: "modelImage ve tshirtImage zorunlu." },
-        { status: 400 }
+        { error: "Unauthorized", message: "Missing token" },
+        { status: 401 }
       );
     }
 
-    // ✅ Tip hatasını bypass ediyoruz (deploy "Ready" olsun diye)
-    const result: any = await fal.run(
-      "fal-ai/kling/v1-5/kolors-virtual-try-on",
-      {
-        input: {
-          model_image: modelImage,
-          garment_image: tshirtImage,
-          generate_video: !!generateVideo,
-        } as any,
-      } as any
+    const token = authHeader.replace("Bearer ", "");
+
+    // ======================
+    // SUPABASE SERVER CLIENT
+    // ======================
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
     );
 
-    const imageUrl =
-      result?.image?.url ||
-      result?.image_url ||
-      result?.output?.image?.url ||
-      result?.output?.imageUrl ||
-      null;
+    // ======================
+    // USER DOĞRULA
+    // ======================
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser(token);
 
-    const videoUrl =
-      result?.video?.url ||
-      result?.video_url ||
-      result?.output?.video?.url ||
-      result?.output?.videoUrl ||
-      null;
-
-    if (!imageUrl) {
+    if (userError || !user) {
       return NextResponse.json(
-        { error: "fal.ai imageUrl döndürmedi.", raw: result },
-        { status: 502 }
+        { error: "Unauthorized", message: "Invalid session" },
+        { status: 401 }
       );
     }
 
-    return NextResponse.json(
-      { imageUrl, videoUrl: videoUrl ?? null },
-      { status: 200 }
-    );
+    // ======================
+    // 🔥 KREDİ DÜŞ
+    // ======================
+    const { data, error } = await supabase.rpc("consume_credit");
+
+    if (error) {
+      console.error("CREDIT ERROR:", error);
+      return NextResponse.json(
+        { error: "credit_error", message: "Credit check failed" },
+        { status: 500 }
+      );
+    }
+
+    if (data === -1) {
+      return NextResponse.json(
+        {
+          error: "no_credits",
+          message: "Deneme hakkın bitti",
+        },
+        { status: 402 }
+      );
+    }
+
+    console.log("✅ CREDIT USED. REMAINING:", data);
+
+    // ======================
+    // ⏩ BURADAN SONRASI TRY-ON
+    // (fal.ai / kling vs.)
+    // ======================
+
+    return NextResponse.json({
+      ok: true,
+      remainingCredits: data,
+    });
   } catch (err: any) {
+    console.error("SERVER ERROR:", err);
     return NextResponse.json(
-      { error: "Server error", message: String(err?.message ?? err) },
+      { error: "server_error", message: err.message },
       { status: 500 }
     );
   }
